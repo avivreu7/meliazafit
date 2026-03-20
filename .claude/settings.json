@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/avivr/Desktop/app//**)",
+      "Read(//c/Users/avivr/Desktop/app/**)",
+      "Bash(npx create-next-app@latest meliazafit --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --yes)"
+    ]
+  }
+}

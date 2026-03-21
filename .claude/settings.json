@@ -4,7 +4,8 @@
       "Read(//c/Users/avivr/Desktop/app//**)",
       "Read(//c/Users/avivr/Desktop/app/**)",
       "Bash(npx create-next-app@latest meliazafit --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --yes)",
-      "Bash(ls -la c:UsersavivrDesktopappmeliazafitnext.config.*)"
+      "Bash(ls -la c:UsersavivrDesktopappmeliazafitnext.config.*)",
+      "Bash(powershell -command \"\\(Get-Item ''public/bg-video.mp4''\\).length / 1MB\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\avivr\\Desktop\\app\\meliazafit\\src\\app\\room",

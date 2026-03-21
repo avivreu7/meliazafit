@@ -14,10 +14,9 @@ interface SpotlightEntry {
 }
 interface GalleryItem { id: string; text: string; userName: string }
 
-type CeremonyState = "idle" | "loading" | "running" | "done";
-type Speed = 1 | 2 | 3;
+type CeremonyState = "idle" | "loading" | "running";
 
-const BASE_INTERVAL = 2400; // ms between entries at ×1
+const BASE_INTERVAL = 2400; // ms between entries
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 const ROOMS = Array.from({ length: 10 }, (_, i) => i + 1);
 
@@ -32,12 +31,8 @@ export default function DashboardPage() {
   const spotlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Collective burn ceremony state ──────────────────────────────────
-  const [ceremony,         setCeremony]         = useState<CeremonyState>("idle");
-  const [ceremonyProgress, setCeremonyProgress] = useState(0);
-  const [ceremonyTotal,    setCeremonyTotal]    = useState(0);
-  const [ceremonySpeed,    setCeremonySpeed]    = useState<Speed>(1);
-  const ceremonyAborted   = useRef(false);
-  const ceremonySpeedRef  = useRef<Speed>(1);
+  const [ceremony,      setCeremony]      = useState<CeremonyState>("idle");
+  const ceremonyAborted = useRef(false);
   const startCeremonyRef  = useRef<() => void>(() => {});
   const ceremonyStateRef  = useRef<CeremonyState>("idle");
 
@@ -162,29 +157,25 @@ export default function DashboardPage() {
       id: string; user_name: string; my_chametz: string;
       new_invitation: string; ai_blessing: string; room_number: number;
     }[];
-    setCeremonyTotal(entries.length);
-    setCeremonyProgress(0);
     setCeremony("running");
 
     for (let i = 0; i < entries.length; i++) {
       if (ceremonyAborted.current) break;
       const entry = entries[i];
-      setCeremonyProgress(i + 1);
       spawnEmber(entry.my_chametz, entry.room_number);
-      const interval = Math.max(400, BASE_INTERVAL / ceremonySpeedRef.current);
       forceSpotlight({
         id: `cer-${entry.id}`,
         userName: entry.user_name,
         myChametz: entry.my_chametz,
         newInvitation: entry.new_invitation,
         aiBlessing: entry.ai_blessing,
-      }, interval - 200);
-      await sleep(interval);
+      }, BASE_INTERVAL - 200);
+      await sleep(BASE_INTERVAL);
     }
 
     if (!ceremonyAborted.current) {
       setSpotlight(null);
-      setCeremony("done");
+      setCeremony("idle");
     }
   }, [spawnEmber, forceSpotlight]);
 
@@ -202,12 +193,6 @@ export default function DashboardPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
-
-  // Sync speed state → ref (ref is readable inside async ceremony loop)
-  const setSpeed = (s: Speed) => {
-    setCeremonySpeed(s);
-    ceremonySpeedRef.current = s;
-  };
 
   // Max count for bar chart scaling
   const maxRoomCount = Math.max(1, ...Object.values(roomCounts));
@@ -244,7 +229,7 @@ export default function DashboardPage() {
             key={ember.id}
             text={ember.text}
             roomNumber={ember.roomNum}
-            speedMultiplier={ceremony === "running" ? ceremonySpeed : 1}
+            speedMultiplier={1}
             onDone={() => removeEmber(ember.id)}
           />
         ))}
@@ -296,12 +281,8 @@ export default function DashboardPage() {
           <motion.div key={total} initial={{ scale: 1.5 }} animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 350, damping: 18 }}
             className="glass-fire px-5 py-3 text-center">
-            <p className="text-orange-200 text-xs font-semibold mb-0.5">
-              {ceremony === "running" ? `מבעיר ${ceremonyProgress}/${ceremonyTotal}` : "נשרפו"}
-            </p>
-            <p className="text-white font-black text-4xl leading-none">
-              {ceremony === "running" ? ceremonyProgress : total}
-            </p>
+            <p className="text-orange-200 text-xs font-semibold mb-0.5">נשרפו</p>
+            <p className="text-white font-black text-4xl leading-none">{total}</p>
             <p className="text-orange-300 text-xs mt-0.5">חמץ 🔥</p>
           </motion.div>
         </div>
@@ -359,127 +340,25 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── 9. Ceremony done — celebration ────────────────────────── */}
-      <AnimatePresence>
-        {ceremony === "done" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 flex flex-col items-center justify-center"
-            style={{ zIndex: 25, background: "rgba(60,5,0,0.55)", backdropFilter: "blur(4px)" }}
-          >
-            {["✨","🌟","💛","🔥","✨","🌟","💛"].map((e, i) => (
-              <motion.span key={i}
-                initial={{ opacity: 0, y: 60, x: (i - 3) * 80 }}
-                animate={{ opacity: [0, 1, 0], y: -200 + (i % 3) * -60 }}
-                transition={{ delay: i * 0.15, duration: 2.5, ease: "easeOut" }}
-                className="absolute text-5xl"
-                style={{ bottom: "20%" }}
-              >
-                {e}
-              </motion.span>
-            ))}
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.7, y: 40 }}
-              animate={{ opacity: 1, scale: 1,   y: 0  }}
-              transition={{ delay: 0.3, duration: 0.7, type: "spring" }}
-              className="flex flex-col items-center gap-6 text-center px-12"
-            >
-              <motion.div
-                animate={{ scale: [1, 1.3, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-                className="text-9xl"
-              >
-                🔥
-              </motion.div>
-
-              <h2 className="text-fire-shimmer text-6xl font-black title-hero leading-tight">
-                המדורה בערה!
-              </h2>
-              <p className="text-white/85 text-2xl font-semibold">
-                {ceremonyTotal} חמץ רגשי עלה לאש
-              </p>
-              <p className="text-orange-300 text-lg leading-relaxed max-w-lg">
-                כולם שחררו, כולם בחרו מחדש.
-                <br />
-                חג פסח שמח ומשחרר לכולנו! ✨
-              </p>
-
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  ceremonyAborted.current = true;
-                  setCeremony("idle");
-                  setCeremonyProgress(0);
-                }}
-                className="glass px-8 py-3 text-white/60 text-base rounded-2xl hover:bg-white/20 transition-all mt-2"
-              >
-                חזור לדשבורד החי
-              </motion.button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── 10. Progress bar + speed controls during ceremony ─────── */}
-      {ceremony === "running" && (
-        <div className="absolute bottom-16 inset-x-0 px-12" style={{ zIndex: 22 }}>
-          <div className="max-w-2xl mx-auto">
-            {/* Speed controls */}
-            <div className="flex justify-center gap-2 mb-3">
-              <span className="text-white/40 text-xs self-center ml-2">מהירות:</span>
-              {([1, 2, 3] as Speed[]).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setSpeed(s)}
-                  className="px-4 py-1.5 rounded-xl text-sm font-bold transition-all"
-                  style={{
-                    background: ceremonySpeed === s
-                      ? "linear-gradient(135deg, #f97316, #dc2626)"
-                      : "rgba(255,255,255,0.12)",
-                    color: ceremonySpeed === s ? "#fff" : "rgba(255,255,255,0.5)",
-                    border: "1px solid rgba(255,255,255,0.15)",
-                  }}
-                >
-                  ×{s}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex justify-between text-white/50 text-xs mb-1.5">
-              <span>מבעיר...</span>
-              <span>{ceremonyProgress} / {ceremonyTotal}</span>
-            </div>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.15)" }}>
-              <motion.div
-                className="h-full rounded-full"
-                style={{ background: "linear-gradient(90deg, #f97316, #dc2626)" }}
-                animate={{ width: `${(ceremonyProgress / ceremonyTotal) * 100}%` }}
-                transition={{ duration: 0.4 }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── 11. Gallery strip ─────────────────────────────────────── */}
-      {ceremony !== "running" && ceremony !== "loading" && (
+      {ceremony !== "loading" && (
         <GalleryStrip items={gallery} />
       )}
 
       {/* ── 12. Bottom bar ────────────────────────────────────────── */}
-      {ceremony === "idle" && (
-        <div className="absolute bottom-0 inset-x-0 flex justify-center py-3 px-6" style={{ zIndex: 20 }}>
-          <div className="glass flex items-center gap-3 px-5 py-2">
-            <span className="text-orange-400 font-bold text-sm flicker">🔥</span>
-            <span className="text-white/55 text-sm">
-              {total > 0 ? `${total} חמץ רגשי מחכה לביעור` : "המדורה מחכה..."}
-            </span>
-          </div>
+      <div className="absolute bottom-0 inset-x-0 flex justify-center py-3 px-6" style={{ zIndex: 20 }}>
+        <div className="glass flex items-center gap-3 px-5 py-2">
+          <span className="text-orange-400 font-bold text-sm flicker">🔥</span>
+          <span className="text-white/55 text-sm">
+            {ceremony === "running"
+              ? "המדורה בוערת..."
+              : total > 0
+              ? `${total} חמץ רגשי עלה לאש`
+              : "המדורה מחכה..."}
+          </span>
         </div>
-      )}
+      </div>
 
       {/* ── 13. Empty state ───────────────────────────────────────── */}
       {total === 0 && ceremony === "idle" && (

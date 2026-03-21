@@ -468,7 +468,7 @@ export default function RoomPage() {
             </AnimatePresence>
 
             <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
-              onClick={() => router.push("/summary")}
+              onClick={() => router.push("/dashboard")}
               className="w-full mt-4 mb-2 text-white/50 font-semibold text-sm py-3 rounded-2xl
                          hover:bg-white/10 active:scale-95 transition-all duration-150"
               style={{ border: "1px solid rgba(255,255,255,0.12)" }}>

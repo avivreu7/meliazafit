@@ -203,7 +203,7 @@ export default function RoomPage() {
 
   return (
     <>
-      <div className="flex h-screen w-screen overflow-hidden" dir="rtl">
+      <div className="flex h-screen overflow-hidden w-full" dir="rtl">
 
         {/* ══ RIGHT PANEL — Global Fire ══ */}
         <div className="absolute inset-0 lg:relative lg:inset-auto lg:w-1/2 lg:shrink-0 overflow-hidden">
@@ -312,11 +312,11 @@ export default function RoomPage() {
             )}
           </AnimatePresence>
 
-          <div className="flex flex-col items-center min-h-full px-6 py-6 max-w-md mx-auto w-full">
+          <div className="flex flex-col items-center min-h-full px-3 py-4 sm:px-6 sm:py-6 max-w-md mx-auto w-full">
 
             {/* Header */}
             <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center gap-2 mb-6 mt-2">
+              className="flex flex-col items-center gap-1 mb-3 mt-1 sm:mb-5 sm:mt-2">
               <div className="h-5">
                 {nameLoaded ? (
                   userName && userName !== "אנונימי"
@@ -329,7 +329,7 @@ export default function RoomPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xl flicker">🔥</span>
-                <h1 className="text-white font-black text-2xl title-hero">חדר {roomId}</h1>
+                <h1 className="text-white font-black text-xl sm:text-2xl title-hero">חדר {roomId}</h1>
                 <span className="text-xl flicker" style={{ animationDelay: "0.4s" }}>🔥</span>
               </div>
             </motion.div>
@@ -341,19 +341,19 @@ export default function RoomPage() {
                   key="submitted"
                   initial={{ opacity: 0, scale: 0.9, y: 20 }}
                   animate={{ opacity: 1, scale: 1,   y: 0  }}
-                  className="glass w-full px-6 py-8 flex flex-col items-center gap-5 text-center"
+                  className="glass w-full px-4 py-5 sm:px-6 sm:py-8 flex flex-col items-center gap-4 text-center"
                 >
                   <motion.div
                     animate={{ scale: [1, 1.2, 1] }}
                     transition={{ duration: 1.6, repeat: Infinity }}
-                    className="text-6xl"
+                    className="text-5xl"
                   >🔥</motion.div>
 
                   <div>
                     <p className="text-orange-300 text-xs font-bold tracking-widest uppercase mb-2">
                       שרפת בהצלחה
                     </p>
-                    <p className="text-white font-black text-xl leading-snug">
+                    <p className="text-white font-black text-base sm:text-xl leading-snug">
                       {alreadySubmitted.chametz}
                     </p>
                   </div>
@@ -403,13 +403,13 @@ export default function RoomPage() {
                           initial={{ scale: 0.4, y: 30 }}
                           animate={{ scale: [0.4, 1.4, 1.0], y: [30, -15, 0] }}
                           transition={{ duration: 0.7, times: [0, 0.5, 1] }}
-                          className="text-8xl"
+                          className="text-6xl"
                         >🔥</motion.div>
                         <motion.p
                           initial={{ opacity: 0, y: 12 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.35 }}
-                          className="text-white font-black text-2xl mt-5 text-center"
+                          className="text-white font-black text-xl mt-3 text-center"
                           style={{ textShadow: "0 0 24px rgba(255,100,0,0.9)" }}
                         >
                           החמץ שלך עולה באש!
@@ -426,7 +426,7 @@ export default function RoomPage() {
                     )}
                   </AnimatePresence>
 
-                  <form ref={formRef} action={formAction} className="flex flex-col gap-5 h-full">
+                  <form ref={formRef} action={formAction} className="flex flex-col gap-3 sm:gap-4 h-full">
                     {QUESTIONS.map((q, i) => (
                       <motion.div key={q.name}
                         initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
@@ -442,13 +442,13 @@ export default function RoomPage() {
                           </span>
                           <label className="text-white font-bold text-sm">{q.label}</label>
                         </div>
-                        <textarea name={q.name} required rows={3}
+                        <textarea name={q.name} required rows={2}
                           placeholder={q.hint} className="fire-input" />
                       </motion.div>
                     ))}
 
                     <motion.button whileTap={{ scale: 0.96 }} type="submit" disabled={isPending}
-                      className="w-full text-white font-black text-lg py-4 rounded-2xl mt-auto
+                      className="w-full text-white font-black text-base sm:text-lg py-3 sm:py-4 rounded-2xl mt-auto
                                  transition-all duration-150 disabled:opacity-55 disabled:cursor-not-allowed
                                  flex items-center justify-center gap-2"
                       style={{
@@ -469,7 +469,7 @@ export default function RoomPage() {
 
             <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
               onClick={() => router.push("/dashboard")}
-              className="w-full mt-4 mb-2 text-white/50 font-semibold text-sm py-3 rounded-2xl
+              className="w-full mt-3 mb-2 text-white/50 font-semibold text-sm py-2 sm:py-3 rounded-2xl
                          hover:bg-white/10 active:scale-95 transition-all duration-150"
               style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
               סיימנו — חזרה למליאה 🏠

@@ -294,6 +294,11 @@ function InstructionsPhase({
             <p className="text-white/40 text-xs text-center leading-snug">
               {lobbyUrl.replace(/^https?:\/\//, "")}
             </p>
+            <Link href="/lobby"
+              className="text-orange-300 text-xs font-bold underline underline-offset-2
+                         hover:text-orange-200 transition-colors mt-1">
+              💻 אין לך פלאפון? לחץ כאן
+            </Link>
           </motion.div>
         )}
       </div>

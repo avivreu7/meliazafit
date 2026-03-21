@@ -85,7 +85,7 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, y: -30 }}
       transition={{ duration: 0.7 }}
-      className="absolute inset-0 flex flex-col items-center justify-between py-10 px-8 z-10"
+      className="absolute inset-0 flex flex-col items-center justify-between py-5 px-4 md:py-10 md:px-8 z-10 overflow-y-auto"
     >
       {/* spacer */}
       <div />
@@ -96,7 +96,7 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.5, duration: 0.8, type: "spring", bounce: 0.3 }}
-          className="text-8xl flicker"
+          className="text-5xl md:text-8xl flicker"
         >
           🔥
         </motion.div>
@@ -105,7 +105,7 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8, duration: 0.7 }}
-          className="text-fire-shimmer text-6xl md:text-7xl font-extrabold leading-tight"
+          className="text-fire-shimmer text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold leading-tight"
         >
           ביעור חמץ רגשי
         </motion.h1>
@@ -114,7 +114,7 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.1, duration: 0.7 }}
-          className="text-white/85 text-2xl md:text-3xl font-semibold leading-relaxed"
+          className="text-white/85 text-base sm:text-xl md:text-2xl lg:text-3xl font-semibold leading-relaxed"
         >
           חיבור בין נקיון הבית לניקיון הלב
         </motion.p>
@@ -155,7 +155,7 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
               <div className="p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.95)" }}>
                 <QRCode
                   value={lobbyUrl}
-                  size={140}
+                  size={120}
                   bgColor="transparent"
                   fgColor="#1a0500"
                   level="M"
@@ -175,7 +175,7 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
         animate={{ opacity: 1 }}
         transition={{ delay: 2.5, duration: 0.6 }}
         onClick={onNext}
-        className="glass-fire px-10 py-4 text-white font-bold text-xl rounded-2xl
+        className="glass-fire px-6 py-3 md:px-10 md:py-4 text-white font-bold text-base md:text-xl rounded-2xl
                    hover:scale-105 active:scale-95 transition-transform duration-150
                    relative pulse-ring"
       >
@@ -218,7 +218,7 @@ function InstructionsPhase({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -60 }}
       transition={{ duration: 0.6 }}
-      className="absolute inset-0 flex flex-col items-center justify-between py-8 px-8 z-10"
+      className="absolute inset-0 flex flex-col items-center justify-between py-4 px-4 md:py-8 md:px-8 z-10 overflow-y-auto"
     >
       <motion.div
         initial={{ opacity: 0, y: -15 }}
@@ -226,7 +226,7 @@ function InstructionsPhase({
         transition={{ delay: 0.2 }}
         className="text-center"
       >
-        <h2 className="text-fire-shimmer text-4xl font-extrabold">איך עושים את זה?</h2>
+        <h2 className="text-fire-shimmer text-2xl md:text-4xl font-extrabold">איך עושים את זה?</h2>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full max-w-5xl">
@@ -279,7 +279,7 @@ function InstructionsPhase({
             <div className="p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.95)" }}>
               <QRCode
                 value={lobbyUrl}
-                size={150}
+                size={130}
                 bgColor="transparent"
                 fgColor="#1a0500"
                 level="M"
@@ -308,7 +308,7 @@ function InstructionsPhase({
         </button>
         <button
           onClick={onStart}
-          className="glass-fire px-12 py-4 text-white font-extrabold text-xl rounded-2xl
+          className="glass-fire px-6 py-3 md:px-12 md:py-4 text-white font-extrabold text-base md:text-xl rounded-2xl
                      hover:scale-105 active:scale-95 transition-transform duration-150
                      relative pulse-ring"
           style={{

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import QRCode from "react-qr-code";
 
 const STEPS = [
@@ -164,6 +165,11 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
               <p className="text-white/40 text-xs text-center max-w-28 leading-snug">
                 {lobbyUrl.replace(/^https?:\/\//, "")}
               </p>
+              <Link href="/lobby"
+                className="text-orange-300 text-xs font-bold underline underline-offset-2
+                           hover:text-orange-200 transition-colors mt-1">
+                💻 אין לך פלאפון? לחץ כאן
+              </Link>
             </motion.div>
           )}
         </motion.div>

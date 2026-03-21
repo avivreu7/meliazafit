@@ -13,6 +13,7 @@ const initialState: SubmitChametzState = { success: false };
 interface Ember  { id: string; text: string; roomNum: number }
 interface Recent { id: string; userName: string; myChametz: string; newInvitation: string }
 interface Submitted { blessing: string; chametz: string }
+interface RoomEntry { id: string; userName: string; myChametz: string; newInvitation: string }
 
 const QUESTIONS = [
   { name: "my_chametz",     label: "החמץ שלי?",                  hint: "מה אני נושא שכבד עליי...", num: 1 },
@@ -47,10 +48,13 @@ export default function RoomPage() {
   const [showSuccessFlash, setShowSuccessFlash] = useState(false);
 
   // Fire panel (global)
-  const [embers,     setEmbers]     = useState<Ember[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [recent,     setRecent]     = useState<Recent | null>(null);
+  const [embers,      setEmbers]      = useState<Ember[]>([]);
+  const [totalCount,  setTotalCount]  = useState(0);
+  const [recent,      setRecent]      = useState<Recent | null>(null);
   const recentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Room submissions list (this room only)
+  const [roomEntries, setRoomEntries] = useState<RoomEntry[]>([]);
 
   // Countdown timer (set by admin)
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
@@ -81,14 +85,26 @@ export default function RoomPage() {
     }
   }, [roomId]);
 
-  // ── Load initial global count ───────────────────────────────────────
+  // ── Load initial global count + this room's entries ────────────────
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     supabase
       .from("chametz_entries")
       .select("id", { count: "exact", head: true })
       .then(({ count }) => { if (count) setTotalCount(count); });
-  }, []);
+
+    supabase
+      .from("chametz_entries")
+      .select("id, user_name, my_chametz, new_invitation")
+      .eq("room_number", roomId)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        if (data) setRoomEntries(
+          (data as { id: string; user_name: string; my_chametz: string; new_invitation: string }[])
+            .map(r => ({ id: r.id, userName: r.user_name, myChametz: r.my_chametz, newInvitation: r.new_invitation }))
+        );
+      });
+  }, [roomId]);
 
   // ── Timer: fetch initial state + subscribe to changes ──────────────
   useEffect(() => {
@@ -163,6 +179,9 @@ export default function RoomPage() {
           if (row.my_chametz) spawnEmber(row.my_chametz, row.room_number);
           setRecent({ id: row.id, userName: row.user_name,
                       myChametz: row.my_chametz, newInvitation: row.new_invitation });
+          if (row.room_number === roomId)
+            setRoomEntries(prev => [...prev, { id: row.id, userName: row.user_name,
+              myChametz: row.my_chametz, newInvitation: row.new_invitation }]);
           if (recentTimer.current) clearTimeout(recentTimer.current);
           recentTimer.current = setTimeout(() => setRecent(null), 4500);
         }
@@ -474,6 +493,41 @@ export default function RoomPage() {
               style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
               סיימנו — חזרה למליאה 🏠
             </motion.button>
+
+            {/* ── Room submissions list ── */}
+            {roomEntries.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="w-full mb-3"
+              >
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <p className="text-orange-300/80 text-xs font-bold tracking-wide">
+                    🔥 מה החדר שורף ({roomEntries.length})
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 max-h-52 overflow-y-auto">
+                  {roomEntries.map(e => (
+                    <div key={e.id} className="rounded-xl px-3 py-2.5" style={{
+                      background: "rgba(255,255,255,0.07)",
+                      border: "1px solid rgba(255,140,50,0.2)",
+                    }}>
+                      <p className="text-orange-200 text-xs font-bold mb-1 truncate">✦ {e.userName}</p>
+                      <p className="text-white/80 text-xs leading-snug">
+                        <span className="text-orange-400/70">שורף: </span>{e.myChametz}
+                      </p>
+                      <p className="text-white/50 text-xs leading-snug mt-0.5">
+                        <span className="text-green-400/60">מזמין: </span>{e.newInvitation}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-white/30 text-xs text-center mt-2 italic">
+                  💬 שאלה לשיח: מה דומה בחמץ שלך? מה שונה?
+                </p>
+              </motion.div>
+            )}
           </div>
         </div>
 

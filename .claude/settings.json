@@ -3,7 +3,12 @@
     "allow": [
       "Read(//c/Users/avivr/Desktop/app//**)",
       "Read(//c/Users/avivr/Desktop/app/**)",
-      "Bash(npx create-next-app@latest meliazafit --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --yes)"
+      "Bash(npx create-next-app@latest meliazafit --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --yes)",
+      "Bash(ls -la c:UsersavivrDesktopappmeliazafitnext.config.*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\avivr\\Desktop\\app\\meliazafit\\src\\app\\room",
+      "C:\\Users\\avivr\\Desktop\\app\\meliazafit\\src\\app\\room-dashboard"
     ]
   }
 }

@@ -1,26 +1,164 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-family-assistant: var(--font-assistant), "Arial Hebrew", Arial, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ── Base ───────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  direction: rtl;
+  text-align: right;
+  overflow-x: hidden;
+  font-family: var(--font-assistant), "Arial Hebrew", Arial, sans-serif;
 }
+
+/* ── Glassmorphism — warm fire-tinted ───────────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid rgba(255, 160, 60, 0.32);
+  border-radius: 1.5rem;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 200, 100, 0.22);
+}
+
+/* Fire-accent glass — for forms, cards, buttons */
+.glass-fire {
+  background: rgba(200, 60, 0, 0.2);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid rgba(255, 150, 50, 0.5);
+  border-radius: 1.5rem;
+  box-shadow:
+    0 8px 40px rgba(255, 70, 0, 0.28),
+    inset 0 1px 0 rgba(255, 200, 100, 0.25);
+}
+
+/* ── Dashboard root — no scroll, full-screen ────────────────────────────── */
+.dashboard-root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: #050000;
+}
+
+/* ── Typography — fire hero ─────────────────────────────────────────────── */
+.title-hero {
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+}
+
+.text-fire-shimmer {
+  background: linear-gradient(
+    90deg,
+    #ff9500 0%, #ffcc00 28%, #ff6000 50%, #ffcc00 72%, #ff9500 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 2.8s linear infinite;
+}
+
+/* ── Fire input focus glow ───────────────────────────────────────────────── */
+.fire-input {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 160, 60, 0.35);
+  border-radius: 0.875rem;
+  color: #fff;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  font-size: 1rem;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+.fire-input::placeholder { color: rgba(255, 255, 255, 0.38); }
+.fire-input:focus {
+  border-color: rgba(255, 120, 0, 0.8);
+  box-shadow: 0 0 0 2px rgba(255, 100, 0, 0.45), 0 0 20px rgba(255, 80, 0, 0.2);
+}
+
+/* ── Animations ──────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1;    transform: scale(1)    rotate(-1deg); }
+  25%       { opacity: 0.90; transform: scale(1.05) rotate(1.5deg); }
+  50%       { opacity: 0.96; transform: scale(0.97) rotate(-0.5deg); }
+  75%       { opacity: 0.91; transform: scale(1.03) rotate(0.8deg); }
+}
+.flicker { animation: flicker 2.2s ease-in-out infinite; display: inline-block; }
+
+@keyframes pulse-ring {
+  0%   { transform: scale(0.9);  opacity: 0.75; }
+  70%  { transform: scale(1.18); opacity: 0;    }
+  100% { transform: scale(0.9);  opacity: 0;    }
+}
+.pulse-ring { position: relative; }
+.pulse-ring::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 2px solid rgba(255, 130, 0, 0.65);
+  animation: pulse-ring 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+/* ── Pure-CSS spark particles (FireAmbient) ─────────────────────────────── */
+@keyframes spark-rise {
+  0%   { transform: translateY(0)    translateX(0)    scale(1);    opacity: 0; }
+  8%   { opacity: 1; }
+  60%  { opacity: 0.8; }
+  85%  { opacity: 0.3; transform: translateY(-60vh) translateX(var(--tx, 12px)) scale(0.4); }
+  100% { opacity: 0;   transform: translateY(-80vh) translateX(var(--tx, 18px)) scale(0.1); }
+}
+
+.spark {
+  position: absolute;
+  border-radius: 50% 50% 30% 30%;
+  background: radial-gradient(
+    ellipse at 40% 30%,
+    #fff8c0 0%,
+    #ffaa00 35%,
+    #ff4400 70%,
+    rgba(200, 20, 0, 0) 100%
+  );
+  box-shadow:
+    0 0 6px 2px rgba(255, 150, 0, 0.8),
+    0 0 14px 4px rgba(255, 80, 0, 0.5);
+  animation: spark-rise linear infinite;
+  --tx: calc((var(--spark-seed, 0.5) - 0.5) * 40px);
+  will-change: transform, opacity;
+}
+
+/* Vary horizontal drift per spark via nth-child pseudo-random seed */
+.spark:nth-child(1)  { --tx: -18px; }
+.spark:nth-child(2)  { --tx:  10px; }
+.spark:nth-child(3)  { --tx: -6px;  }
+.spark:nth-child(4)  { --tx:  22px; }
+.spark:nth-child(5)  { --tx: -14px; }
+.spark:nth-child(6)  { --tx:  8px;  }
+.spark:nth-child(7)  { --tx: -24px; }
+.spark:nth-child(8)  { --tx:  16px; }
+.spark:nth-child(9)  { --tx: -10px; }
+.spark:nth-child(10) { --tx:  20px; }
+.spark:nth-child(11) { --tx: -4px;  }
+.spark:nth-child(12) { --tx:  12px; }
+.spark:nth-child(13) { --tx: -20px; }
+.spark:nth-child(14) { --tx:  6px;  }
+.spark:nth-child(15) { --tx: -16px; }
+.spark:nth-child(16) { --tx:  24px; }
+.spark:nth-child(17) { --tx: -8px;  }
+.spark:nth-child(18) { --tx:  14px; }

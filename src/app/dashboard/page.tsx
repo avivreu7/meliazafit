@@ -18,7 +18,6 @@ type CeremonyState = "idle" | "loading" | "running";
 
 const BASE_INTERVAL = 2400; // ms between entries
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-const ROOMS = Array.from({ length: 10 }, (_, i) => i + 1);
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -26,8 +25,6 @@ export default function DashboardPage() {
   const [spotlight, setSpotlight] = useState<SpotlightEntry | null>(null);
   const [gallery,   setGallery]   = useState<GalleryItem[]>([]);
   const [total,     setTotal]     = useState(0);
-  // Per-room counts (for bar chart)
-  const [roomCounts, setRoomCounts] = useState<Record<number, number>>({});
   const spotlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Collective burn ceremony state ──────────────────────────────────
@@ -35,9 +32,6 @@ export default function DashboardPage() {
   const ceremonyAborted = useRef(false);
   const startCeremonyRef  = useRef<() => void>(() => {});
   const ceremonyStateRef  = useRef<CeremonyState>("idle");
-
-  // All 10 rooms submitted at least one entry
-  const allRoomsDone = ROOMS.every(n => (roomCounts[n] ?? 0) > 0);
 
   // Sync ceremony state → ref (readable in stable broadcast listener)
   useEffect(() => { ceremonyStateRef.current = ceremony; }, [ceremony]);
@@ -78,31 +72,15 @@ export default function DashboardPage() {
     // Gallery (last 8)
     supabase
       .from("chametz_entries")
-      .select("id, user_name, my_chametz, new_invitation, room_number", { count: "exact" })
+      .select("id, user_name, my_chametz, new_invitation", { count: "exact" })
       .order("created_at", { ascending: false })
       .limit(8)
       .then(({ data, count }) => {
         if (count) setTotal(count);
         if (data) {
-          const rows = data as {
-            id: string; user_name: string;
-            my_chametz: string; new_invitation: string; room_number: number;
-          }[];
+          const rows = data as { id: string; user_name: string; new_invitation: string }[];
           setGallery(rows.reverse().map(r => ({ id: r.id, text: r.new_invitation, userName: r.user_name })));
         }
-      });
-
-    // Per-room counts (fetch all room_numbers — lightweight)
-    supabase
-      .from("chametz_entries")
-      .select("room_number")
-      .then(({ data }) => {
-        if (!data) return;
-        const counts: Record<number, number> = {};
-        (data as { room_number: number }[]).forEach(r => {
-          counts[r.room_number] = (counts[r.room_number] ?? 0) + 1;
-        });
-        setRoomCounts(counts);
       });
   }, []);
 
@@ -116,15 +94,11 @@ export default function DashboardPage() {
         (payload) => {
           if (ceremony === "running") return;
           const row = payload.new as {
-            id: string; user_name: string; room_number: number;
+            id: string; user_name: string;
             my_chametz: string; new_invitation: string; ai_blessing: string;
           };
           setTotal(n => n + 1);
-          setRoomCounts(prev => ({
-            ...prev,
-            [row.room_number]: (prev[row.room_number] ?? 0) + 1,
-          }));
-          if (row.my_chametz)    spawnEmber(row.my_chametz, row.room_number);
+          if (row.my_chametz)    spawnEmber(row.my_chametz, 1);
           if (row.new_invitation)
             setGallery(prev => [...prev, { id: row.id, text: row.new_invitation, userName: row.user_name }]);
           forceSpotlight({ id: row.id, userName: row.user_name,
@@ -148,21 +122,21 @@ export default function DashboardPage() {
     const supabase = getSupabaseBrowserClient();
     const { data } = await supabase
       .from("chametz_entries")
-      .select("id, user_name, my_chametz, new_invitation, ai_blessing, room_number")
+      .select("id, user_name, my_chametz, new_invitation, ai_blessing")
       .order("created_at", { ascending: true });
 
     if (!data || data.length === 0) { setCeremony("idle"); return; }
 
     const entries = data as {
       id: string; user_name: string; my_chametz: string;
-      new_invitation: string; ai_blessing: string; room_number: number;
+      new_invitation: string; ai_blessing: string;
     }[];
     setCeremony("running");
 
     for (let i = 0; i < entries.length; i++) {
       if (ceremonyAborted.current) break;
       const entry = entries[i];
-      spawnEmber(entry.my_chametz, entry.room_number);
+      spawnEmber(entry.my_chametz, 1);
       forceSpotlight({
         id: `cer-${entry.id}`,
         userName: entry.user_name,
@@ -193,9 +167,6 @@ export default function DashboardPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
-
-  // Max count for bar chart scaling
-  const maxRoomCount = Math.max(1, ...Object.values(roomCounts));
 
   return (
     <div className="dashboard-root">
@@ -243,40 +214,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* ── Room bar chart ── */}
-          <div className="glass px-4 py-3 min-w-52">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-white/50 text-xs font-semibold">חדרים</p>
-              <p className="text-orange-300 text-xs font-bold">
-                {Object.keys(roomCounts).length}/10
-                {allRoomsDone && <span className="text-green-400 mr-1"> ✓ הכל מוכן!</span>}
-              </p>
-            </div>
-            <div className="flex gap-1 items-end h-10">
-              {ROOMS.map(n => {
-                const count = roomCounts[n] ?? 0;
-                const heightPct = count > 0 ? Math.max(15, (count / maxRoomCount) * 100) : 6;
-                return (
-                  <div key={n} className="flex flex-col items-center gap-0.5 flex-1">
-                    <motion.div
-                      animate={{ height: `${heightPct}%` }}
-                      transition={{ duration: 0.5, type: "spring", stiffness: 200 }}
-                      className="w-full rounded-sm"
-                      style={{
-                        background: count > 0
-                          ? "linear-gradient(to top, #dc2626, #f97316)"
-                          : "rgba(255,255,255,0.12)",
-                        boxShadow: count > 0 ? "0 0 6px rgba(249,115,22,0.5)" : "none",
-                        minHeight: "3px",
-                      }}
-                    />
-                    <span className="text-white/40 text-xs leading-none">{n}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Counter */}
           <motion.div key={total} initial={{ scale: 1.5 }} animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 350, damping: 18 }}

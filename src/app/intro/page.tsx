@@ -77,7 +77,7 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
   const [lobbyUrl, setLobbyUrl] = useState("");
 
   useEffect(() => {
-    setLobbyUrl(window.location.origin + "/lobby");
+    setLobbyUrl(window.location.origin + "/form");
   }, []);
 
   return (
@@ -165,10 +165,10 @@ function IntroPhase({ onNext }: { onNext: () => void }) {
               <p className="text-white/40 text-xs text-center max-w-28 leading-snug">
                 {lobbyUrl.replace(/^https?:\/\//, "")}
               </p>
-              <Link href="/lobby"
+              <Link href="/form"
                 className="text-orange-300 text-xs font-bold underline underline-offset-2
                            hover:text-orange-200 transition-colors mt-1">
-                💻 אין לך פלאפון? לחץ כאן
+                💻 פתח בדפדפן (ללא סריקה)
               </Link>
             </motion.div>
           )}
@@ -202,14 +202,14 @@ function InstructionsPhase({
   const [lobbyUrl, setLobbyUrl] = useState("");
 
   useEffect(() => {
-    setLobbyUrl(window.location.origin + "/lobby");
+    setLobbyUrl(window.location.origin + "/form");
   }, []);
 
   const instructions = [
-    { num: "1", text: "פתחו את האפליקציה בטלפון שלכם ורשמו את שמכם" },
-    { num: "2", text: "בחרו את מספר חדר הזום שאליו שובצתם" },
-    { num: "3", text: "ענו על 3 שאלות בשקט ובכנות" },
-    { num: "4", text: 'לחצו על "שגר למדורה" ← ← ←' },
+    { num: "1", text: "פתחו את האפליקציה — בפלאפון או במחשב" },
+    { num: "2", text: "רשמו את שמכם והצטרפו לפעילות" },
+    { num: "3", text: "קיימו שיח בקבוצה על שלושת השאלות" },
+    { num: "4", text: 'בתום הזמן — ענו בכנות ולחצו "שגר למדורה 🔥"' },
   ];
 
   const questions = [
@@ -294,10 +294,10 @@ function InstructionsPhase({
             <p className="text-white/40 text-xs text-center leading-snug">
               {lobbyUrl.replace(/^https?:\/\//, "")}
             </p>
-            <Link href="/lobby"
+            <Link href="/form"
               className="text-orange-300 text-xs font-bold underline underline-offset-2
                          hover:text-orange-200 transition-colors mt-1">
-              💻 אין לך פלאפון? לחץ כאן
+              💻 פתח בדפדפן (ללא סריקה)
             </Link>
           </motion.div>
         )}

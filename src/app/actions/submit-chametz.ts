@@ -14,7 +14,6 @@ export async function submitChametz(
   formData: FormData
 ): Promise<SubmitChametzState> {
   const userName     = (formData.get("user_name")      as string)?.trim();
-  const roomNumber   = Number(formData.get("room_number"));
   const myChametz    = (formData.get("my_chametz")     as string)?.trim();
   const whyLetGo     = (formData.get("why_let_go")     as string)?.trim();
   const newInvitation = (formData.get("new_invitation") as string)?.trim();
@@ -22,15 +21,12 @@ export async function submitChametz(
   if (!userName || !myChametz || !whyLetGo || !newInvitation)
     return { success: false, error: "נא למלא את כל השדות" };
 
-  if (roomNumber < 1 || roomNumber > 10 || isNaN(roomNumber))
-    return { success: false, error: "מספר חדר לא תקין" };
-
   const aiBlessing = await generateBlessing(myChametz, whyLetGo, newInvitation, userName);
 
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from("chametz_entries").insert({
     user_name: userName,
-    room_number: roomNumber,
+    room_number: 1,
     my_chametz: myChametz,
     why_let_go: whyLetGo,
     new_invitation: newInvitation,
@@ -74,15 +70,20 @@ export async function resetRoomEntries(
 //     id integer primary key default 1,
 //     ends_at timestamptz,
 //     is_active boolean default false,
+//     phase text default 'writing',
 //     check (id = 1)
 //   );
-//   insert into event_timer values (1, null, false)
+//   insert into event_timer values (1, null, false, 'writing')
 //     on conflict (id) do nothing;
 //   alter table event_timer enable row level security;
 //   create policy "Public read" on event_timer for select using (true);
 //
+//   -- If table already exists, run:
+//   ALTER TABLE event_timer ADD COLUMN IF NOT EXISTS phase TEXT DEFAULT 'writing';
+//
 export async function setEventTimer(
-  minutes: number | null
+  minutes: number | null,
+  phase: "discussion" | "writing" = "writing"
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabaseAdminClient();
   const ends_at  = minutes
@@ -90,7 +91,7 @@ export async function setEventTimer(
     : null;
   const { error } = await supabase
     .from("event_timer")
-    .upsert({ id: 1, ends_at, is_active: minutes !== null });
+    .upsert({ id: 1, ends_at, is_active: minutes !== null, phase });
   if (error) {
     console.error("[Timer] upsert failed:", error);
     return { success: false, error: error.message };

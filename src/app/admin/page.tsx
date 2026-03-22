@@ -97,6 +97,51 @@ async function printPDF() {
   setTimeout(() => win.print(), 600);
 }
 
+/* ── Individual PDF Memorial ─────────────────────────────────────────────── */
+function printSinglePDF(entry: Entry) {
+  const esc = (v: string) => (v ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const date = new Date().toLocaleDateString("he-IL", { year: "numeric", month: "long", day: "numeric" });
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8"><title>מזכרת — ${esc(entry.user_name)}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Assistant', Arial, sans-serif; direction: rtl; background: #fff7ed;
+           min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 30px; }
+    .card { max-width: 480px; width: 100%; background: white; border: 2px solid #fed7aa;
+            border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 4px 30px rgba(0,0,0,0.1); }
+    h1 { font-size: 1.8rem; color: #c2410c; margin-bottom: 6px; }
+    .date { color: #9ca3af; font-size: 0.9rem; margin-bottom: 24px; }
+    .name { font-size: 1.4rem; font-weight: 800; color: #9a3412; margin-bottom: 28px; }
+    .label { font-size: 0.72rem; color: #c2410c; font-weight: 700; text-transform: uppercase;
+             letter-spacing: 0.08em; margin-bottom: 6px; }
+    .value { font-size: 1.05rem; color: #1c0500; margin-bottom: 22px; line-height: 1.6; }
+    .blessing { border-top: 1px solid #fde68a; padding-top: 18px; font-style: italic;
+                color: #92400e; font-size: 0.95rem; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🔥 ביעור חמץ רגשי</h1>
+    <p class="date">${date}</p>
+    <p class="name">✦ ${esc(entry.user_name)} ✦</p>
+    <p class="label">החמץ שרפתי</p>
+    <p class="value">${esc(entry.my_chametz)}</p>
+    <p class="label">ומזמין/ת במקום</p>
+    <p class="value">${esc(entry.new_invitation)}</p>
+    ${entry.ai_blessing ? `<p class="blessing">✨ ${esc(entry.ai_blessing)}</p>` : ""}
+  </div>
+</body>
+</html>`;
+  const win = window.open("", "_blank");
+  if (!win) { alert("אפשר חלונות קופצים בדפדפן"); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 400);
+}
+
 /* ── CSV Export ─────────────────────────────────────────────────────────── */
 async function downloadCSV() {
   const supabase = getSupabaseBrowserClient();
@@ -185,12 +230,14 @@ export default function AdminPage() {
   const liveFeedRef = useRef<Entry[]>([]);
 
   // ── Timer state ──
-  const [timerMinutes, setTimerMinutes]   = useState(10);
-  const [timerActive,  setTimerActive]    = useState(false);
-  const [timerEnd,     setTimerEnd]       = useState<Date | null>(null);
-  const [timerRemain,  setTimerRemain]    = useState<number | null>(null);
-  const [timerLoading, setTimerLoading]   = useState(false);
-  const [timerError,   setTimerError]     = useState<string | null>(null);
+  const [timerActive,        setTimerActive]        = useState(false);
+  const [timerPhase,         setTimerPhase]         = useState<"discussion" | "writing" | null>(null);
+  const [timerEnd,           setTimerEnd]           = useState<Date | null>(null);
+  const [timerRemain,        setTimerRemain]        = useState<number | null>(null);
+  const [timerLoading,       setTimerLoading]       = useState(false);
+  const [timerError,         setTimerError]         = useState<string | null>(null);
+  const [discussionMinutes,  setDiscussionMinutes]  = useState(8);
+  const [writingMinutes,     setWritingMinutes]     = useState(10);
 
   // ── Ignite ceremony ──
   const [igniteLoading, setIgniteLoading] = useState(false);
@@ -214,13 +261,14 @@ export default function AdminPage() {
   const fetchTimer = async () => {
     const supabase = getSupabaseBrowserClient();
     const { data } = await supabase
-      .from("event_timer").select("ends_at, is_active").eq("id", 1).single();
+      .from("event_timer").select("ends_at, is_active, phase").eq("id", 1).single();
     if (data?.is_active && data?.ends_at) {
       const end = new Date(data.ends_at);
       if (end > new Date()) {
         setTimerActive(true);
         setTimerEnd(end);
         setTimerRemain(Math.ceil((end.getTime() - Date.now()) / 1000));
+        setTimerPhase((data.phase ?? "writing") as "discussion" | "writing");
       } else {
         setTimerActive(false);
       }
@@ -262,15 +310,28 @@ export default function AdminPage() {
     return () => clearInterval(id);
   }, [timerEnd]);
 
-  const handleStartTimer = async () => {
+  const handleStartTimer = async (minutes: number, phase: "discussion" | "writing") => {
     setTimerLoading(true); setTimerError(null);
-    const result = await setEventTimer(timerMinutes);
+    const result = await setEventTimer(minutes, phase);
     if (result.success) {
-      const end = new Date(Date.now() + timerMinutes * 60_000);
+      const end = new Date(Date.now() + minutes * 60_000);
       setTimerActive(true); setTimerEnd(end);
-      setTimerRemain(timerMinutes * 60);
+      setTimerRemain(minutes * 60);
+      setTimerPhase(phase);
     } else {
       setTimerError(result.error ?? "שגיאה — האם יצרת את טבלת event_timer?");
+    }
+    setTimerLoading(false);
+  };
+
+  const handleSkipToWriting = async () => handleStartTimer(writingMinutes, "writing");
+
+  const handleFinishNow = async () => {
+    setTimerLoading(true);
+    const result = await setEventTimer(5 / 60, "writing"); // ~5 seconds
+    if (result.success) {
+      setTimerActive(true); setTimerPhase("writing");
+      setTimerEnd(new Date(Date.now() + 5000)); setTimerRemain(5);
     }
     setTimerLoading(false);
   };
@@ -295,7 +356,7 @@ export default function AdminPage() {
   const handleStopTimer = async () => {
     setTimerLoading(true);
     await setEventTimer(null);
-    setTimerActive(false); setTimerEnd(null); setTimerRemain(null);
+    setTimerActive(false); setTimerEnd(null); setTimerRemain(null); setTimerPhase(null);
     setTimerLoading(false);
   };
 
@@ -366,20 +427,17 @@ export default function AdminPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <StatCard label="סה״כ רשומות"  value={total}                              color="#f97316" />
-          <StatCard label="חדרים פעילים" value={Object.keys(roomCounts).length}     color="#22c55e" />
-          <StatCard label="חדרים שקטים"  value={Math.max(0, 10-Object.keys(roomCounts).length)} color="#94a3b8" />
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <StatCard label="סה״כ שולחים" value={total}          color="#f97316" />
+          <StatCard label="נטענו"        value={entries.length} color="#22c55e" />
         </div>
 
         {/* ── Timer Control ── */}
         <div className="mb-8 p-6 rounded-2xl"
           style={{ background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.35)" }}>
-          <h2 className="text-orange-300 font-bold text-lg mb-1 flex items-center gap-2">
-            ⏱️ טיימר האירוע
-          </h2>
+          <h2 className="text-orange-300 font-bold text-lg mb-1">⏱️ טיימרי האירוע</h2>
           <p className="text-white/45 text-sm mb-4">
-            הפעלת הטיימר תציג ספירה לאחור לכל החדרים ותעביר אוטומטית לדשבורד הקולקטיבי.
+            שלב 1 — שיח: הטופס נעול לתלמידים. שלב 2 — כתיבה: הטופס פתוח, בסיום עוברים לדשבורד.
           </p>
 
           {timerError && (
@@ -390,61 +448,88 @@ export default function AdminPage() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-3">
-            {!timerActive ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <span className="text-white/60 text-sm">זמן:</span>
-                  {[5, 8, 10, 15, 20].map(m => (
-                    <button key={m} onClick={() => setTimerMinutes(m)}
-                      className="px-3 py-1.5 rounded-xl text-sm font-bold transition-all"
-                      style={{
-                        background: timerMinutes === m
-                          ? "linear-gradient(135deg, #f97316, #dc2626)"
-                          : "rgba(255,255,255,0.1)",
-                        color: timerMinutes === m ? "#fff" : "rgba(255,255,255,0.5)",
-                        border: "1px solid rgba(255,255,255,0.15)",
-                      }}>
-                      {m}′
-                    </button>
-                  ))}
-                </div>
-                <button onClick={handleStartTimer} disabled={timerLoading}
-                  className="px-6 py-2.5 rounded-xl font-bold text-white transition-all active:scale-95 pulse-ring"
-                  style={{
-                    background: "linear-gradient(135deg, #f97316, #dc2626)",
-                    boxShadow: "0 0 20px rgba(249,115,22,0.5)",
-                    opacity: timerLoading ? 0.6 : 1,
-                  }}>
-                  {timerLoading ? "מפעיל..." : "🔥 הפעל טיימר"}
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="glass-fire px-5 py-3 text-center">
-                    <p className="text-orange-200 text-xs font-semibold mb-0.5">נותר</p>
-                    <p className={`font-black text-3xl tabular-nums ${(timerRemain ?? 0) < 60 ? "text-red-300" : "text-white"}`}>
-                      {timerRemain !== null ? fmt(timerRemain) : "--:--"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-orange-300 font-bold text-sm">הטיימר פעיל!</p>
-                    <p className="text-white/40 text-xs">כל החדרים רואים ספירה לאחור</p>
-                  </div>
-                </div>
+          {/* Active timer status */}
+          {timerActive && (
+            <div className="mb-5 p-4 rounded-xl flex flex-wrap items-center gap-3"
+              style={{
+                background: timerPhase === "discussion" ? "rgba(80,40,0,0.5)" : "rgba(180,50,0,0.4)",
+                border: "1px solid rgba(255,150,50,0.3)",
+              }}>
+              <div className="glass-fire px-4 py-2 text-center">
+                <p className="text-orange-200 text-xs font-semibold mb-0.5">
+                  {timerPhase === "discussion" ? "💬 שיח קבוצתי" : "✍️ כתיבה עצמאית"}
+                </p>
+                <p className={`font-black text-3xl tabular-nums ${(timerRemain ?? 0) < 60 ? "text-red-300" : "text-white"}`}>
+                  {timerRemain !== null ? fmt(timerRemain) : "--:--"}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                {timerPhase === "discussion" && (
+                  <button onClick={handleSkipToWriting} disabled={timerLoading}
+                    className="px-4 py-1.5 rounded-xl font-bold text-white text-sm transition-all active:scale-95"
+                    style={{ background: "rgba(249,115,22,0.5)", border: "1px solid rgba(249,115,22,0.7)", opacity: timerLoading ? 0.6 : 1 }}>
+                    דלג לכתיבה ←
+                  </button>
+                )}
+                {timerPhase === "writing" && (
+                  <button onClick={handleFinishNow} disabled={timerLoading}
+                    className="px-4 py-1.5 rounded-xl font-bold text-white text-sm transition-all active:scale-95"
+                    style={{ background: "rgba(249,115,22,0.5)", border: "1px solid rgba(249,115,22,0.7)", opacity: timerLoading ? 0.6 : 1 }}>
+                    סיים עכשיו →
+                  </button>
+                )}
                 <button onClick={handleStopTimer} disabled={timerLoading}
-                  className="px-5 py-2.5 rounded-xl font-bold transition-all active:scale-95"
-                  style={{
-                    background: "rgba(220,38,38,0.3)",
-                    border: "1px solid rgba(220,38,38,0.5)",
-                    color: "#fca5a5",
-                    opacity: timerLoading ? 0.6 : 1,
-                  }}>
-                  עצור
+                  className="px-4 py-1.5 rounded-xl font-bold text-sm transition-all active:scale-95"
+                  style={{ background: "rgba(220,38,38,0.3)", border: "1px solid rgba(220,38,38,0.5)", color: "#fca5a5", opacity: timerLoading ? 0.6 : 1 }}>
+                  עצור הכל
                 </button>
-              </>
-            )}
+              </div>
+            </div>
+          )}
+
+          {/* Two-phase setup */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Discussion */}
+            <div className="p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <p className="text-orange-300 font-bold text-sm mb-1">שלב 1 — שיח קבוצתי</p>
+              <p className="text-white/40 text-xs mb-3">הטופס נעול, השאלות גלויות לדיון</p>
+              <div className="flex items-center gap-2 mb-3">
+                <input type="number" min="1" max="60" value={discussionMinutes}
+                  onChange={e => setDiscussionMinutes(Math.max(1, Number(e.target.value)))}
+                  className="fire-input text-center w-16 text-base font-bold py-1" />
+                <span className="text-white/60 text-sm">דקות</span>
+              </div>
+              <button onClick={() => handleStartTimer(discussionMinutes, "discussion")} disabled={timerLoading}
+                className="w-full px-4 py-2 rounded-xl font-bold text-white text-sm transition-all active:scale-95"
+                style={{
+                  background: timerActive && timerPhase === "discussion"
+                    ? "rgba(255,255,255,0.12)" : "linear-gradient(135deg, #f97316, #dc2626)",
+                  opacity: timerLoading ? 0.6 : 1,
+                }}>
+                {timerActive && timerPhase === "discussion" ? "🟢 שיח פעיל" : "▶ הפעל שיח"}
+              </button>
+            </div>
+
+            {/* Writing */}
+            <div className="p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <p className="text-orange-300 font-bold text-sm mb-1">שלב 2 — כתיבה עצמאית</p>
+              <p className="text-white/40 text-xs mb-3">הטופס פתוח, בסיום עוברים לדשבורד</p>
+              <div className="flex items-center gap-2 mb-3">
+                <input type="number" min="1" max="60" value={writingMinutes}
+                  onChange={e => setWritingMinutes(Math.max(1, Number(e.target.value)))}
+                  className="fire-input text-center w-16 text-base font-bold py-1" />
+                <span className="text-white/60 text-sm">דקות</span>
+              </div>
+              <button onClick={() => handleStartTimer(writingMinutes, "writing")} disabled={timerLoading}
+                className="w-full px-4 py-2 rounded-xl font-bold text-white text-sm transition-all active:scale-95"
+                style={{
+                  background: timerActive && timerPhase === "writing"
+                    ? "rgba(255,255,255,0.12)" : "linear-gradient(135deg, #f97316, #dc2626)",
+                  opacity: timerLoading ? 0.6 : 1,
+                }}>
+                {timerActive && timerPhase === "writing" ? "🟢 כתיבה פעילה" : "▶ הפעל כתיבה"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -523,35 +608,6 @@ export default function AdminPage() {
           )}
         </AnimatePresence>
 
-        {/* Room breakdown */}
-        <div className="mb-8">
-          <p className="text-white/50 text-sm font-semibold mb-3">פירוט לפי חדר:</p>
-          <div className="grid grid-cols-5 gap-2">
-            {Array.from({ length: 10 }, (_, i) => i + 1).map(room => {
-              const rs = roomResetState[room];
-              return (
-                <div key={room} className="rounded-xl p-3 text-center"
-                  style={{ background: roomCounts[room] ? "rgba(249,115,22,0.2)" : "rgba(255,255,255,0.05)",
-                           border: `1px solid ${roomCounts[room] ? "rgba(249,115,22,0.45)" : "rgba(255,255,255,0.1)"}` }}>
-                  <p className="text-white/50 text-xs mb-0.5">חדר {room}</p>
-                  <p className="text-white font-black text-2xl mb-2">{roomCounts[room] ?? 0}</p>
-                  {roomCounts[room] ? (
-                    <button onClick={() => handleRoomReset(room)} disabled={rs === "deleting"}
-                      className="text-xs px-2 py-1 rounded-lg transition-all w-full"
-                      style={{
-                        background: rs === "confirm" ? "rgba(220,38,38,0.5)" : "rgba(255,255,255,0.08)",
-                        color: rs === "confirm" ? "#fca5a5" : "rgba(255,255,255,0.4)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                      }}>
-                      {rs === "deleting" ? "..." : rs === "confirm" ? "בטוח?" : "אפס"}
-                    </button>
-                  ) : <div className="h-6" />}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Full reset */}
         <div className="mb-8 p-6 rounded-2xl"
           style={{ background: "rgba(220,20,0,0.12)", border: "1px solid rgba(220,20,0,0.35)" }}>
@@ -598,18 +654,19 @@ export default function AdminPage() {
           {entries.map(entry => (
             <div key={entry.id} className="rounded-xl px-4 py-3 flex items-start gap-3"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
-              <span className="text-xs px-2 py-1 rounded-lg font-bold shrink-0 mt-0.5"
-                style={{ background: "rgba(249,115,22,0.2)", color: "#fdba74" }}>
-                חדר {entry.room_number}
-              </span>
               <div className="flex-1 min-w-0">
                 <p className="text-white font-semibold text-sm">{entry.user_name}</p>
                 <p className="text-white/45 text-xs truncate mt-0.5">{entry.my_chametz}</p>
               </div>
-              <p className="text-white/25 text-xs shrink-0">
+              <p className="text-white/25 text-xs shrink-0 self-center">
                 {new Date(entry.created_at).toLocaleTimeString("he-IL",
                   { hour: "2-digit", minute: "2-digit" })}
               </p>
+              <button onClick={() => printSinglePDF(entry)} title="מזכרת אישית"
+                className="shrink-0 text-orange-400/60 hover:text-orange-300 transition-colors self-center"
+                style={{ fontSize: "1rem" }}>
+                🖨️
+              </button>
             </div>
           ))}
         </div>

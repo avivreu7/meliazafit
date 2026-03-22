@@ -88,7 +88,7 @@ export default function ProjectorPage() {
         if (row) applyTimer(row);
       }).subscribe();
 
-    const bcastCh = supabase.channel("projector-event-control")
+    const bcastCh = supabase.channel("event-control")
       .on("broadcast", { event: "timer_update" }, ({ payload }) => {
         applyTimer(payload as { ends_at: string | null; is_active: boolean; phase: string | null });
       })

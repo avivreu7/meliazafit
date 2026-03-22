@@ -170,14 +170,18 @@ async function downloadCSV() {
   URL.revokeObjectURL(url);
 }
 
-/* ── Broadcast helper ────────────────────────────────────────────────── */
-function broadcastEvent(event: string, payload: object) {
+/* ── Broadcast helper — all events go over "event-control" ───────────── */
+// Supabase Broadcast requires sender+receiver to share the SAME channel name.
+// We create a fresh subscription, send, then remove it after a short delay.
+function broadcastOnEventControl(event: string, payload: object) {
   const supabase = getSupabaseBrowserClient();
-  const ch = supabase.channel(`ctrl-${event}-${Date.now()}`);
+  // Use a unique suffix only to avoid Supabase's "duplicate channel" guard on
+  // the SAME client instance — the server routes all "event-control" subs together.
+  const ch = supabase.channel("event-control", { config: { broadcast: { self: false } } });
   ch.subscribe(status => {
     if (status === "SUBSCRIBED")
       ch.send({ type: "broadcast", event, payload })
-        .finally(() => setTimeout(() => supabase.removeChannel(ch), 1200));
+        .finally(() => setTimeout(() => supabase.removeChannel(ch), 1500));
   });
 }
 
@@ -329,7 +333,7 @@ export default function AdminPage() {
       setTimerActive(true); setTimerEnd(end);
       setTimerRemain(minutes * 60);
       setTimerPhase(phase);
-      broadcastEvent("timer_update", { ends_at: end.toISOString(), is_active: true, phase });
+      broadcastOnEventControl("timer_update", { ends_at: end.toISOString(), is_active: true, phase });
     } else {
       setTimerError(result.error ?? "שגיאה — האם יצרת את טבלת event_timer?");
     }
@@ -345,33 +349,23 @@ export default function AdminPage() {
       const end = new Date(Date.now() + 5000);
       setTimerActive(true); setTimerPhase("writing");
       setTimerEnd(end); setTimerRemain(5);
-      broadcastEvent("timer_update", { ends_at: end.toISOString(), is_active: true, phase: "writing" });
+      broadcastOnEventControl("timer_update", { ends_at: end.toISOString(), is_active: true, phase: "writing" });
     }
     setTimerLoading(false);
   };
 
-  const handleIgnite = async () => {
+  const handleIgnite = () => {
     setIgniteLoading(true);
     setIgniteSent(false);
-    const supabase = getSupabaseBrowserClient();
-    const channel  = supabase.channel("event-control");
-    await new Promise<void>(resolve => {
-      channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          channel.send({ type: "broadcast", event: "ignite_ceremony", payload: {} })
-            .then(() => { setIgniteSent(true); resolve(); });
-        }
-      });
-    });
-    setTimeout(() => supabase.removeChannel(channel), 1500);
-    setIgniteLoading(false);
+    broadcastOnEventControl("ignite_ceremony", {});
+    setTimeout(() => { setIgniteSent(true); setIgniteLoading(false); }, 800);
   };
 
   const handleStopTimer = async () => {
     setTimerLoading(true);
     await setEventTimer(null);
     setTimerActive(false); setTimerEnd(null); setTimerRemain(null); setTimerPhase(null);
-    broadcastEvent("timer_update", { ends_at: null, is_active: false, phase: null });
+    broadcastOnEventControl("timer_update", { ends_at: null, is_active: false, phase: null });
     setTimerLoading(false);
   };
 
@@ -382,7 +376,7 @@ export default function AdminPage() {
     if (result.success) {
       setEntries([]); setTotal(0); setDone(true);
       setLiveFeed([]); liveFeedRef.current = [];
-      broadcastEvent("db_reset", {});
+      broadcastOnEventControl("db_reset", {});
     } else { alert("שגיאה: " + result.error); }
     setDeleting(false); setConfirmed(false);
   };

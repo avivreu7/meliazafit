@@ -176,7 +176,7 @@ export default function FormPage() {
 
     // Broadcast channel: timer_update (instant from admin) + db_reset
     const bcastChannel = supabase
-      .channel("form-event-control")
+      .channel("event-control")
       .on("broadcast", { event: "timer_update" }, ({ payload }) => {
         applyTimerRow(payload as { ends_at: string | null; is_active: boolean; phase: string | null });
       })

@@ -10,19 +10,26 @@ import { submitChametz, SubmitChametzState } from "@/app/actions/submit-chametz"
 
 const initialState: SubmitChametzState = { success: false };
 
+const DRAFT_KEY  = "meliazafit_draft";
+const NAME_KEY   = "meliazafit_name";
+const SUBMIT_KEY = "meliazafit_submitted_form";
+
 interface Ember  { id: string; text: string }
 interface Recent { id: string; userName: string; myChametz: string; newInvitation: string }
 interface Submitted { blessing: string; chametz: string; invitation: string; userName: string }
 interface Entry  { id: string; userName: string; myChametz: string; newInvitation: string }
 
-type Step        = "loading" | "name" | "form";
-type TimerPhase  = "discussion" | "writing";
+type Step       = "loading" | "name" | "form";
+type TimerPhase = "discussion" | "writing";
+type Draft      = { my_chametz: string; why_let_go: string; new_invitation: string };
 
 const QUESTIONS = [
-  { name: "my_chametz",     label: "החמץ שלי?",                  hint: "מה אני נושא שכבד עליי...", num: 1 },
-  { name: "why_let_go",     label: "למה אני רוצה להיפרד ממנו?",  hint: "מה זה עושה לי...",          num: 2 },
-  { name: "new_invitation", label: "מה אני מזמין במקום?",         hint: "מה אני בוחר לקבל...",       num: 3 },
+  { name: "my_chametz"     as keyof Draft, label: "החמץ שלי?",                  hint: "מה אני נושא שכבד עליי...", num: 1 },
+  { name: "why_let_go"     as keyof Draft, label: "למה אני רוצה להיפרד ממנו?",  hint: "מה זה עושה לי...",          num: 2 },
+  { name: "new_invitation" as keyof Draft, label: "מה אני מזמין במקום?",         hint: "מה אני בוחר לקבל...",       num: 3 },
 ];
+
+const EMPTY_DRAFT: Draft = { my_chametz: "", why_let_go: "", new_invitation: "" };
 
 function triggerHaptic() {
   if (typeof navigator !== "undefined" && "vibrate" in navigator)
@@ -35,18 +42,34 @@ function formatTime(seconds: number) {
 }
 
 export default function FormPage() {
-  const router  = useRouter();
+  const router   = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const formRef  = useRef<HTMLFormElement>(null);
 
-  const [step,       setStep]       = useState<Step>("loading");
-  const [nameInput,  setNameInput]  = useState("");
-  const [nameError,  setNameError]  = useState(false);
-  const [userName,   setUserName]   = useState("");
+  const [step,      setStep]      = useState<Step>("loading");
+  const [nameInput, setNameInput] = useState("");
+  const [nameError, setNameError] = useState(false);
+  const [userName,  setUserName]  = useState("");
 
   const [alreadySubmitted, setAlreadySubmitted] = useState<Submitted | null>(null);
   const [showSuccessFlash, setShowSuccessFlash] = useState(false);
 
+  // Draft auto-save
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const updateDraft = useCallback((field: keyof Draft, value: string) => {
+    setDraft(prev => {
+      const next = { ...prev, [field]: value };
+      if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+      draftSaveTimer.current = setTimeout(() => {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+      }, 400);
+      return next;
+    });
+  }, []);
+
+  // Timer state
   const [timerPhase,    setTimerPhase]    = useState<TimerPhase | null>(null);
   const [timerActive,   setTimerActive]   = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
@@ -59,8 +82,8 @@ export default function FormPage() {
   const recentTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [entries,    setEntries]    = useState<Entry[]>([]);
 
-  // Form is open ONLY when admin has started writing phase and it's still active
-  const formOpen = timerLoaded && timerPhase === "writing" && timerActive && (timeRemaining ?? 0) > 0;
+  // Form open only when writing phase is active
+  const formOpen    = timerLoaded && timerPhase === "writing" && timerActive && (timeRemaining ?? 0) > 0;
   const inDiscussion = timerLoaded && timerPhase === "discussion" && timerActive && (timeRemaining ?? 0) > 0;
 
   // ── Video autoplay (slow)
@@ -75,13 +98,15 @@ export default function FormPage() {
     return () => document.removeEventListener("click", tryPlay);
   }, []);
 
-  // ── Load name + check duplicate
+  // ── Load name + check duplicate + load draft
   useEffect(() => {
-    const stored = localStorage.getItem("meliazafit_name");
+    const stored = localStorage.getItem(NAME_KEY);
     if (stored) { setUserName(stored); setStep("form"); }
     else         { setStep("name"); }
-    const prev = localStorage.getItem("meliazafit_submitted_form");
+    const prev = localStorage.getItem(SUBMIT_KEY);
     if (prev) { try { setAlreadySubmitted(JSON.parse(prev)); } catch {} }
+    const savedDraft = localStorage.getItem(DRAFT_KEY);
+    if (savedDraft) { try { setDraft(JSON.parse(savedDraft)); } catch {} }
   }, []);
 
   // ── Load initial data
@@ -105,11 +130,11 @@ export default function FormPage() {
       });
   }, []);
 
-  // ── Timer fetch + subscribe (all events for real-time)
+  // ── Timer fetch + realtime (postgres_changes + broadcast)
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
 
-    const applyTimerRow = (row: { ends_at: string | null; is_active: boolean; phase: string }) => {
+    const applyTimerRow = (row: { ends_at: string | null; is_active: boolean; phase: string | null }) => {
       if (row.is_active && row.ends_at) {
         const end = new Date(row.ends_at);
         if (end > new Date()) {
@@ -126,27 +151,50 @@ export default function FormPage() {
       setTimeRemaining(null);
     };
 
+    // Initial fetch
     supabase
       .from("event_timer")
       .select("ends_at, is_active, phase")
       .eq("id", 1)
       .single()
       .then(({ data }) => {
-        if (data) applyTimerRow(data as { ends_at: string | null; is_active: boolean; phase: string });
+        if (data) applyTimerRow(data as { ends_at: string | null; is_active: boolean; phase: string | null });
         setTimerLoaded(true);
       });
 
-    const channel = supabase
-      .channel("form-timer-watch")
+    // postgres_changes fallback (no filter — more reliable)
+    const dbChannel = supabase
+      .channel("form-timer-db")
       .on("postgres_changes",
         { event: "*", schema: "public", table: "event_timer" },
         (payload) => {
-          const row = (payload.new ?? payload.old) as { ends_at: string | null; is_active: boolean; phase: string };
+          const row = (payload.new ?? payload.old) as { ends_at: string | null; is_active: boolean; phase: string | null };
           if (row) applyTimerRow(row);
         }
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    // Broadcast channel: timer_update (instant from admin) + db_reset
+    const bcastChannel = supabase
+      .channel("form-event-control")
+      .on("broadcast", { event: "timer_update" }, ({ payload }) => {
+        applyTimerRow(payload as { ends_at: string | null; is_active: boolean; phase: string | null });
+      })
+      .on("broadcast", { event: "db_reset" }, () => {
+        localStorage.removeItem(SUBMIT_KEY);
+        localStorage.removeItem(NAME_KEY);
+        localStorage.removeItem(DRAFT_KEY);
+        setAlreadySubmitted(null);
+        setDraft(EMPTY_DRAFT);
+        setUserName("");
+        setStep("name");
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(dbChannel);
+      supabase.removeChannel(bcastChannel);
+    };
   }, []);
 
   // ── Countdown tick
@@ -156,7 +204,7 @@ export default function FormPage() {
       if (timerPhase === "writing") {
         router.push("/dashboard");
       } else {
-        // Discussion ended → clear timer, keep form locked (admin will start writing phase)
+        // Discussion ended → keep form locked until admin starts writing
         setTimerActive(false);
         setTimeRemaining(null);
       }
@@ -222,7 +270,9 @@ export default function FormPage() {
       setShowSuccessFlash(true);
       setTimeout(() => {
         setShowSuccessFlash(false);
-        localStorage.setItem("meliazafit_submitted_form", JSON.stringify(submittedData));
+        localStorage.setItem(SUBMIT_KEY, JSON.stringify(submittedData));
+        localStorage.removeItem(DRAFT_KEY);
+        setDraft(EMPTY_DRAFT);
         setAlreadySubmitted(submittedData);
       }, 1800);
     }
@@ -235,7 +285,7 @@ export default function FormPage() {
     e.preventDefault();
     const trimmed = nameInput.trim();
     if (!trimmed) { setNameError(true); return; }
-    localStorage.setItem("meliazafit_name", trimmed);
+    localStorage.setItem(NAME_KEY, trimmed);
     setUserName(trimmed);
     setStep("form");
   };
@@ -308,7 +358,7 @@ export default function FormPage() {
         </div>
       </div>
 
-      {/* ══ FORM PANEL (scrollable, left on desktop) ══ */}
+      {/* ══ FORM PANEL ══ */}
       <div className="relative z-10 flex flex-col w-full lg:w-1/2 lg:mr-auto lg:ml-0"
         style={{
           background: [
@@ -319,7 +369,7 @@ export default function FormPage() {
           minHeight: "100vh",
         }}>
 
-        {/* Timer banner */}
+        {/* Sticky timer banner */}
         <AnimatePresence>
           {timeRemaining !== null && (
             <motion.div
@@ -346,7 +396,7 @@ export default function FormPage() {
 
         <div className="flex flex-col items-center px-3 py-5 sm:px-6 sm:py-7 max-w-md mx-auto w-full flex-1">
 
-          {/* ── Name entry step ── */}
+          {/* ── Name entry ── */}
           {step === "name" && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               className="w-full flex flex-col items-center gap-6 mt-8">
@@ -427,13 +477,12 @@ export default function FormPage() {
                 </motion.div>
 
               ) : !timerLoaded ? (
-                /* Timer still loading */
                 <div className="flex-1 flex items-center justify-center py-12">
                   <div className="text-4xl flicker">🔥</div>
                 </div>
 
               ) : !formOpen ? (
-                /* ── Locked state (waiting or discussion) ── */
+                /* ── Locked state ── */
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                   className="w-full flex flex-col gap-4">
                   <div className="glass w-full px-5 py-4 text-center">
@@ -478,11 +527,10 @@ export default function FormPage() {
 
               ) : (
                 /* ── Form open (writing phase) ── */
-                <motion.div key="form" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                <motion.div key="form-open" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.12 }}
                   className="glass w-full px-5 py-5 relative overflow-hidden">
 
-                  {/* Success flash */}
                   <AnimatePresence>
                     {showSuccessFlash && (
                       <motion.div
@@ -524,8 +572,15 @@ export default function FormPage() {
                           </span>
                           <label className="text-white font-bold text-sm">{q.label}</label>
                         </div>
-                        <textarea name={q.name} required rows={2}
-                          placeholder={q.hint} className="fire-input" />
+                        <textarea
+                          name={q.name}
+                          required
+                          rows={2}
+                          placeholder={q.hint}
+                          className="fire-input"
+                          value={draft[q.name]}
+                          onChange={e => updateDraft(q.name, e.target.value)}
+                        />
                       </motion.div>
                     ))}
 

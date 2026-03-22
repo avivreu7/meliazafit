@@ -170,6 +170,17 @@ async function downloadCSV() {
   URL.revokeObjectURL(url);
 }
 
+/* ── Broadcast helper ────────────────────────────────────────────────── */
+function broadcastEvent(event: string, payload: object) {
+  const supabase = getSupabaseBrowserClient();
+  const ch = supabase.channel(`ctrl-${event}-${Date.now()}`);
+  ch.subscribe(status => {
+    if (status === "SUBSCRIBED")
+      ch.send({ type: "broadcast", event, payload })
+        .finally(() => setTimeout(() => supabase.removeChannel(ch), 1200));
+  });
+}
+
 /* ── PIN Gate ─────────────────────────────────────────────────────────── */
 function PinGate({ onUnlock }: { onUnlock: () => void }) {
   const [digits, setDigits] = useState<string[]>([]);
@@ -318,6 +329,7 @@ export default function AdminPage() {
       setTimerActive(true); setTimerEnd(end);
       setTimerRemain(minutes * 60);
       setTimerPhase(phase);
+      broadcastEvent("timer_update", { ends_at: end.toISOString(), is_active: true, phase });
     } else {
       setTimerError(result.error ?? "שגיאה — האם יצרת את טבלת event_timer?");
     }
@@ -330,8 +342,10 @@ export default function AdminPage() {
     setTimerLoading(true);
     const result = await setEventTimer(5 / 60, "writing"); // ~5 seconds
     if (result.success) {
+      const end = new Date(Date.now() + 5000);
       setTimerActive(true); setTimerPhase("writing");
-      setTimerEnd(new Date(Date.now() + 5000)); setTimerRemain(5);
+      setTimerEnd(end); setTimerRemain(5);
+      broadcastEvent("timer_update", { ends_at: end.toISOString(), is_active: true, phase: "writing" });
     }
     setTimerLoading(false);
   };
@@ -357,6 +371,7 @@ export default function AdminPage() {
     setTimerLoading(true);
     await setEventTimer(null);
     setTimerActive(false); setTimerEnd(null); setTimerRemain(null); setTimerPhase(null);
+    broadcastEvent("timer_update", { ends_at: null, is_active: false, phase: null });
     setTimerLoading(false);
   };
 
@@ -367,6 +382,7 @@ export default function AdminPage() {
     if (result.success) {
       setEntries([]); setTotal(0); setDone(true);
       setLiveFeed([]); liveFeedRef.current = [];
+      broadcastEvent("db_reset", {});
     } else { alert("שגיאה: " + result.error); }
     setDeleting(false); setConfirmed(false);
   };
@@ -408,6 +424,11 @@ export default function AdminPage() {
             <p className="text-white/50 text-sm mt-1">ביעור חמץ רגשי — {total} רשומות</p>
           </div>
           <div className="flex gap-2 flex-wrap">
+            <a href="/projector" target="_blank"
+              className="text-white/60 text-sm px-4 py-2 rounded-xl transition-all hover:text-white flex items-center gap-1.5"
+              style={{ background: "rgba(80,40,150,0.2)", border: "1px solid rgba(130,80,255,0.35)" }}>
+              📺 פרויקטור
+            </a>
             <button onClick={() => printPDF()}
               className="text-white/60 text-sm px-4 py-2 rounded-xl transition-all hover:text-white flex items-center gap-1.5"
               style={{ background: "rgba(249,115,22,0.15)", border: "1px solid rgba(249,115,22,0.35)" }}>

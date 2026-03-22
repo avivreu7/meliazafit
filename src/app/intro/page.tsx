@@ -43,6 +43,7 @@ export default function IntroPage() {
         playsInline
         className="absolute inset-0 w-full h-full object-cover"
         style={{ opacity: 0.55 }}
+        onCanPlay={e => { (e.target as HTMLVideoElement).playbackRate = 0.5; }}
       >
         <source src="/bg-video.mp4" type="video/mp4" />
       </video>

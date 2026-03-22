@@ -34,50 +34,6 @@ function formatTime(seconds: number) {
   return `${m}:${s}`;
 }
 
-function printPersonalMemorial(data: Submitted) {
-  const esc = (v: string) => (v ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const date = new Date().toLocaleDateString("he-IL", { year: "numeric", month: "long", day: "numeric" });
-  const html = `<!DOCTYPE html>
-<html dir="rtl" lang="he">
-<head>
-  <meta charset="UTF-8"><title>מזכרת — ${esc(data.userName)}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Assistant', Arial, sans-serif; direction: rtl; background: #fff7ed;
-           min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 30px; }
-    .card { max-width: 480px; width: 100%; background: white; border: 2px solid #fed7aa;
-            border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 4px 30px rgba(0,0,0,0.1); }
-    h1 { font-size: 1.8rem; color: #c2410c; margin-bottom: 6px; }
-    .date { color: #9ca3af; font-size: 0.9rem; margin-bottom: 24px; }
-    .name { font-size: 1.4rem; font-weight: 800; color: #9a3412; margin-bottom: 28px; }
-    .label { font-size: 0.72rem; color: #c2410c; font-weight: 700; text-transform: uppercase;
-             letter-spacing: 0.08em; margin-bottom: 6px; }
-    .value { font-size: 1.05rem; color: #1c0500; margin-bottom: 22px; line-height: 1.6; }
-    .blessing { border-top: 1px solid #fde68a; padding-top: 18px; font-style: italic;
-                color: #92400e; font-size: 0.95rem; line-height: 1.7; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>🔥 ביעור חמץ רגשי</h1>
-    <p class="date">${date}</p>
-    <p class="name">✦ ${esc(data.userName)} ✦</p>
-    <p class="label">החמץ שרפתי</p>
-    <p class="value">${esc(data.chametz)}</p>
-    <p class="label">ומזמין/ת במקום</p>
-    <p class="value">${esc(data.invitation)}</p>
-    ${data.blessing ? `<p class="blessing">✨ ${esc(data.blessing)}</p>` : ""}
-  </div>
-</body>
-</html>`;
-  const win = window.open("", "_blank");
-  if (!win) { alert("אפשר חלונות קופצים בדפדפן"); return; }
-  win.document.write(html);
-  win.document.close();
-  setTimeout(() => win.print(), 500);
-}
-
 export default function FormPage() {
   const router  = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -94,6 +50,7 @@ export default function FormPage() {
   const [timerPhase,    setTimerPhase]    = useState<TimerPhase | null>(null);
   const [timerActive,   setTimerActive]   = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [timerLoaded,   setTimerLoaded]   = useState(false);
   const timerEndRef = useRef<Date | null>(null);
 
   const [embers,     setEmbers]     = useState<Ember[]>([]);
@@ -102,13 +59,16 @@ export default function FormPage() {
   const recentTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [entries,    setEntries]    = useState<Entry[]>([]);
 
-  const formLocked = timerPhase === "discussion" && timerActive && (timeRemaining ?? 0) > 0;
+  // Form is open ONLY when admin has started writing phase and it's still active
+  const formOpen = timerLoaded && timerPhase === "writing" && timerActive && (timeRemaining ?? 0) > 0;
+  const inDiscussion = timerLoaded && timerPhase === "discussion" && timerActive && (timeRemaining ?? 0) > 0;
 
-  // ── Video autoplay
+  // ── Video autoplay (slow)
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     video.muted = true;
+    video.playbackRate = 0.5;
     const tryPlay = () => video.play().catch(() => {});
     tryPlay();
     document.addEventListener("click", tryPlay, { once: true });
@@ -145,45 +105,44 @@ export default function FormPage() {
       });
   }, []);
 
-  // ── Timer fetch + subscribe
+  // ── Timer fetch + subscribe (all events for real-time)
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
+
+    const applyTimerRow = (row: { ends_at: string | null; is_active: boolean; phase: string }) => {
+      if (row.is_active && row.ends_at) {
+        const end = new Date(row.ends_at);
+        if (end > new Date()) {
+          timerEndRef.current = end;
+          setTimerPhase((row.phase as TimerPhase) ?? "writing");
+          setTimerActive(true);
+          setTimeRemaining(Math.ceil((end.getTime() - Date.now()) / 1000));
+          return;
+        }
+      }
+      timerEndRef.current = null;
+      setTimerPhase(null);
+      setTimerActive(false);
+      setTimeRemaining(null);
+    };
+
     supabase
       .from("event_timer")
       .select("ends_at, is_active, phase")
       .eq("id", 1)
       .single()
-      .then(({ data, error }) => {
-        if (error || !data) return;
-        if (data.is_active && data.ends_at) {
-          const end = new Date(data.ends_at as string);
-          if (end > new Date()) {
-            timerEndRef.current = end;
-            setTimerPhase((data.phase as TimerPhase) ?? "writing");
-            setTimerActive(true);
-            setTimeRemaining(Math.ceil((end.getTime() - Date.now()) / 1000));
-          }
-        }
+      .then(({ data }) => {
+        if (data) applyTimerRow(data as { ends_at: string | null; is_active: boolean; phase: string });
+        setTimerLoaded(true);
       });
 
     const channel = supabase
       .channel("form-timer-watch")
       .on("postgres_changes",
-        { event: "UPDATE", schema: "public", table: "event_timer", filter: "id=eq.1" },
+        { event: "*", schema: "public", table: "event_timer" },
         (payload) => {
-          const row = payload.new as { ends_at: string | null; is_active: boolean; phase: string };
-          if (row.is_active && row.ends_at) {
-            const end = new Date(row.ends_at);
-            timerEndRef.current = end;
-            setTimerPhase((row.phase as TimerPhase) ?? "writing");
-            setTimerActive(true);
-            setTimeRemaining(Math.ceil((end.getTime() - Date.now()) / 1000));
-          } else {
-            timerEndRef.current = null;
-            setTimerPhase(null);
-            setTimerActive(false);
-            setTimeRemaining(null);
-          }
+          const row = (payload.new ?? payload.old) as { ends_at: string | null; is_active: boolean; phase: string };
+          if (row) applyTimerRow(row);
         }
       )
       .subscribe();
@@ -197,8 +156,7 @@ export default function FormPage() {
       if (timerPhase === "writing") {
         router.push("/dashboard");
       } else {
-        // Discussion ended → unlock form
-        setTimerPhase(null);
+        // Discussion ended → clear timer, keep form locked (admin will start writing phase)
         setTimerActive(false);
         setTimeRemaining(null);
       }
@@ -283,22 +241,22 @@ export default function FormPage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden w-full" dir="rtl">
+    <div className="flex min-h-screen flex-col lg:flex-row overflow-x-hidden w-full" dir="rtl">
 
-      {/* ══ RIGHT PANEL — Fire ══ */}
-      <div className="absolute inset-0 lg:relative lg:inset-auto lg:w-1/2 lg:shrink-0 overflow-hidden">
+      {/* ══ FIRE PANEL (top on mobile, right on desktop) ══ */}
+      <div className="relative lg:fixed lg:inset-y-0 lg:right-0 lg:w-1/2 h-48 sm:h-64 lg:h-full shrink-0 overflow-hidden">
         <video ref={videoRef} autoPlay loop muted playsInline
           className="absolute inset-0 w-full h-full object-cover"
           style={{ opacity: 1, filter: "brightness(1.1) saturate(1.3)" }}>
           <source src="/bg-video.mp4" type="video/mp4" />
         </video>
         <div className="absolute inset-0 lg:hidden" style={{
-          background: "linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.45) 100%)"
+          background: "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 60%, rgba(14,2,0,1) 100%)"
         }} />
         <div className="absolute inset-0 hidden lg:block" style={{
           background: [
-            "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 20%, transparent 75%, rgba(0,0,0,0.6) 100%)",
-            "linear-gradient(to right, transparent 80%, rgba(0,0,0,0.35) 100%)",
+            "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 20%, transparent 75%, rgba(0,0,0,0.6) 100%)",
+            "linear-gradient(to left, transparent 80%, rgba(14,2,0,0.8) 100%)",
           ].join(", ")
         }} />
         <FireAmbient />
@@ -309,17 +267,17 @@ export default function FormPage() {
         </div>
 
         {/* Counter */}
-        <div className="absolute top-5 left-5 z-20">
+        <div className="absolute top-3 left-3 lg:top-5 lg:left-5 z-20">
           <motion.div key={totalCount} initial={{ scale: 1.4 }} animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 300 }}
-            className="glass-fire px-4 py-2 text-center">
+            className="glass-fire px-3 py-1.5 lg:px-4 lg:py-2 text-center">
             <p className="text-orange-200 text-xs font-semibold">שרפו כבר</p>
-            <p className="text-white font-black text-3xl leading-none">{totalCount}</p>
+            <p className="text-white font-black text-2xl lg:text-3xl leading-none">{totalCount}</p>
           </motion.div>
         </div>
 
-        {/* Recent */}
-        <div className="absolute bottom-20 inset-x-0 flex justify-center z-20 px-4">
+        {/* Recent submission */}
+        <div className="absolute bottom-3 lg:bottom-20 inset-x-0 flex justify-center z-20 px-4">
           <AnimatePresence mode="wait">
             {recent ? (
               <motion.div key={recent.id}
@@ -327,7 +285,7 @@ export default function FormPage() {
                 animate={{ opacity: 1, scale: 1,    y: 0  }}
                 exit={{   opacity: 0, scale: 0.9,   y: -15 }}
                 transition={{ duration: 0.45, type: "spring", bounce: 0.2 }}
-                className="max-w-xs w-full px-5 py-4 rounded-2xl text-center"
+                className="max-w-xs w-full px-4 py-3 lg:px-5 lg:py-4 rounded-2xl text-center"
                 style={{
                   background: "rgba(140,20,0,0.6)",
                   border: "1px solid rgba(255,130,0,0.6)",
@@ -337,12 +295,12 @@ export default function FormPage() {
                 <p className="text-orange-300 text-xs font-bold tracking-widest uppercase mb-1">
                   🔥 {recent.userName} שורף/ת
                 </p>
-                <p className="text-white font-black text-lg leading-snug mb-1">{recent.myChametz}</p>
-                <p className="text-white/65 text-sm">ומזמין/ת: {recent.newInvitation}</p>
+                <p className="text-white font-black text-base lg:text-lg leading-snug mb-1">{recent.myChametz}</p>
+                <p className="text-white/65 text-xs lg:text-sm">ומזמין/ת: {recent.newInvitation}</p>
               </motion.div>
             ) : (
               <motion.p key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="text-white/40 text-lg font-semibold text-center">
+                className="text-white/40 text-base font-semibold text-center">
                 {totalCount > 0 ? `${totalCount} כבר שרפו 🔥` : "המדורה מחכה..."}
               </motion.p>
             )}
@@ -350,15 +308,15 @@ export default function FormPage() {
         </div>
       </div>
 
-      {/* ══ LEFT PANEL ══ */}
-      <div className="relative z-10 flex flex-col w-full lg:w-1/2 lg:shrink-0 overflow-y-auto
-        lg:border-r lg:border-orange-600/30"
+      {/* ══ FORM PANEL (scrollable, left on desktop) ══ */}
+      <div className="relative z-10 flex flex-col w-full lg:w-1/2 lg:mr-auto lg:ml-0"
         style={{
           background: [
             "radial-gradient(ellipse at 100% 85%, rgba(220,60,0,0.22) 0%, transparent 55%)",
             "radial-gradient(ellipse at 0%   20%, rgba(180,30,0,0.12) 0%, transparent 50%)",
             "linear-gradient(175deg, #0e0200 0%, #1c0500 30%, #260800 60%, #160300 100%)",
           ].join(", "),
+          minHeight: "100vh",
         }}>
 
         {/* Timer banner */}
@@ -366,13 +324,13 @@ export default function FormPage() {
           {timeRemaining !== null && (
             <motion.div
               initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-              className="flex items-center justify-between px-5 py-2 shrink-0"
+              className="flex items-center justify-between px-5 py-2 shrink-0 sticky top-0 z-30"
               style={{
                 background: timeRemaining < 60
-                  ? "rgba(220,20,0,0.5)"
+                  ? "rgba(220,20,0,0.7)"
                   : timerPhase === "discussion"
-                  ? "rgba(80,40,0,0.5)"
-                  : "rgba(180,50,0,0.4)",
+                  ? "rgba(80,40,0,0.7)"
+                  : "rgba(180,50,0,0.65)",
                 borderBottom: "1px solid rgba(255,120,0,0.3)",
               }}>
               <span className="text-orange-200 text-sm font-bold flex items-center gap-2">
@@ -386,7 +344,7 @@ export default function FormPage() {
           )}
         </AnimatePresence>
 
-        <div className="flex flex-col items-center min-h-full px-3 py-4 sm:px-6 sm:py-6 max-w-md mx-auto w-full">
+        <div className="flex flex-col items-center px-3 py-5 sm:px-6 sm:py-7 max-w-md mx-auto w-full flex-1">
 
           {/* ── Name entry step ── */}
           {step === "name" && (
@@ -432,7 +390,7 @@ export default function FormPage() {
             <>
               {/* Header */}
               <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col items-center gap-1 mb-3 mt-1 sm:mb-5 sm:mt-2">
+                className="flex flex-col items-center gap-1 mb-4 mt-1">
                 <p className="text-orange-300 text-sm font-semibold">שלום, {userName} 👋</p>
                 <div className="flex items-center gap-2">
                   <span className="text-xl flicker">🔥</span>
@@ -441,13 +399,13 @@ export default function FormPage() {
                 </div>
               </motion.div>
 
-              {/* Memorial card (if already submitted) */}
+              {/* ── Already submitted ── */}
               {alreadySubmitted ? (
                 <motion.div
                   key="submitted"
                   initial={{ opacity: 0, scale: 0.9, y: 20 }}
                   animate={{ opacity: 1, scale: 1,   y: 0  }}
-                  className="glass w-full px-4 py-5 sm:px-6 sm:py-8 flex flex-col items-center gap-4 text-center">
+                  className="glass w-full px-4 py-6 sm:px-6 sm:py-8 flex flex-col items-center gap-4 text-center">
                   <motion.div animate={{ scale: [1, 1.2, 1] }}
                     transition={{ duration: 1.6, repeat: Infinity }} className="text-5xl">🔥</motion.div>
                   <div>
@@ -466,36 +424,38 @@ export default function FormPage() {
                       {alreadySubmitted.blessing}
                     </p>
                   </div>
-                  <button
-                    onClick={() => printPersonalMemorial(alreadySubmitted)}
-                    className="px-6 py-2.5 rounded-xl text-white font-bold text-sm transition-all hover:scale-105 active:scale-95"
-                    style={{
-                      background: "linear-gradient(135deg, #f97316, #dc2626)",
-                      boxShadow: "0 4px 16px rgba(249,115,22,0.4)",
-                    }}>
-                    🖨️ שמור מזכרת אישית
-                  </button>
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem("meliazafit_submitted_form");
-                      setAlreadySubmitted(null);
-                    }}
-                    className="text-white/30 text-xs hover:text-white/50 transition-colors">
-                    שלח שוב (לביטול)
-                  </button>
                 </motion.div>
 
-              ) : formLocked ? (
-                /* ── Discussion phase: locked, projectable questions ── */
+              ) : !timerLoaded ? (
+                /* Timer still loading */
+                <div className="flex-1 flex items-center justify-center py-12">
+                  <div className="text-4xl flicker">🔥</div>
+                </div>
+
+              ) : !formOpen ? (
+                /* ── Locked state (waiting or discussion) ── */
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                   className="w-full flex flex-col gap-4">
                   <div className="glass w-full px-5 py-4 text-center">
-                    <p className="text-orange-300 font-bold text-sm tracking-widest uppercase mb-1">
-                      💬 זמן השיח בקבוצה
-                    </p>
-                    <p className="text-white/65 text-sm">
-                      שוחחו על השאלות — הטופס ייפתח בסיום השיח
-                    </p>
+                    {inDiscussion ? (
+                      <>
+                        <p className="text-orange-300 font-bold text-sm tracking-widest uppercase mb-1">
+                          💬 זמן השיח בקבוצה
+                        </p>
+                        <p className="text-white/65 text-sm">
+                          שוחחו על השאלות — הטופס ייפתח בסיום השיח
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-orange-300 font-bold text-sm tracking-widest uppercase mb-1">
+                          ⏳ ממתינים להתחלה
+                        </p>
+                        <p className="text-white/65 text-sm">
+                          הטופס ייפתח כאשר המורה תתחיל את הפעילות
+                        </p>
+                      </>
+                    )}
                   </div>
                   {QUESTIONS.map((q, i) => (
                     <motion.div key={q.name}
@@ -517,10 +477,10 @@ export default function FormPage() {
                 </motion.div>
 
               ) : (
-                /* ── Normal form ── */
+                /* ── Form open (writing phase) ── */
                 <motion.div key="form" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.12 }}
-                  className="glass w-full px-5 py-6 flex-1 relative overflow-hidden">
+                  className="glass w-full px-5 py-5 relative overflow-hidden">
 
                   {/* Success flash */}
                   <AnimatePresence>
@@ -548,7 +508,7 @@ export default function FormPage() {
                     )}
                   </AnimatePresence>
 
-                  <form ref={formRef} action={formAction} className="flex flex-col gap-3 sm:gap-4 h-full">
+                  <form ref={formRef} action={formAction} className="flex flex-col gap-4">
                     {QUESTIONS.map((q, i) => (
                       <motion.div key={q.name}
                         initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
@@ -570,7 +530,7 @@ export default function FormPage() {
                     ))}
 
                     <motion.button whileTap={{ scale: 0.96 }} type="submit" disabled={isPending}
-                      className="w-full text-white font-black text-base sm:text-lg py-3 sm:py-4 rounded-2xl mt-auto
+                      className="w-full text-white font-black text-base sm:text-lg py-4 rounded-2xl mt-2
                                  transition-all duration-150 disabled:opacity-55 disabled:cursor-not-allowed
                                  flex items-center justify-center gap-2"
                       style={{
@@ -591,7 +551,7 @@ export default function FormPage() {
               {/* Back to plenary */}
               <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
                 onClick={() => router.push("/dashboard")}
-                className="w-full mt-3 mb-2 text-white/50 font-semibold text-sm py-2 sm:py-3 rounded-2xl
+                className="w-full mt-4 mb-2 text-white/50 font-semibold text-sm py-3 rounded-2xl
                            hover:bg-white/10 active:scale-95 transition-all duration-150"
                 style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
                 סיימנו — חזרה למליאה 🏠
@@ -600,7 +560,7 @@ export default function FormPage() {
               {/* Entries list */}
               {entries.length > 0 && (
                 <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }} className="w-full mb-3">
+                  transition={{ delay: 0.3 }} className="w-full mb-4">
                   <p className="text-orange-300/80 text-xs font-bold tracking-wide mb-2 px-1">
                     🔥 מה כולם שורפים ({entries.length})
                   </p>

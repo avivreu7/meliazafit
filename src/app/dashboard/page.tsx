@@ -41,6 +41,7 @@ export default function DashboardPage() {
     const video = videoRef.current;
     if (!video) return;
     video.muted = true;
+    video.playbackRate = 0.5;
     const tryPlay = () => video.play().catch(() => {});
     tryPlay();
     document.addEventListener("click", tryPlay, { once: true });
